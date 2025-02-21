@@ -23,8 +23,8 @@ set(CUDA_LINK_LIBRARIES_KEYWORD PUBLIC)
 set(CUDA_SEPARABLE_COMPILATION ON)
 set(CUDA_STANDARD 17)
 
-add_library(task08_houdini SHARED Entrance.cpp Task01.cpp Task01.h)
-target_link_libraries(task08_houdini PUBLIC Houdini)
-target_include_directories(task08_houdini PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ../external/eigen)
+add_library(task01_houdini SHARED Entrance.cpp Task01.cpp Task01.h)
+target_link_libraries(task01_houdini PUBLIC Houdini)
+target_include_directories(task01_houdini PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR} ../external/eigen)
 
-houdini_configure_target(task08_houdini)
+houdini_configure_target(task01_houdini)
