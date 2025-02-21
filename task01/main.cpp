@@ -32,17 +32,29 @@ Eigen::Vector2f time_integration_explicit(const Eigen::Vector2f& p0, float dt){
  * @param dt time step
  * @return output radius and its velocity
  */
-Eigen::Vector2f time_integration_implicit(const Eigen::Vector2f& p0, float dt){
+Eigen::Vector2f time_integration_implicit(const Eigen::Vector2f& p0, float dt)
+{
   const float r0 = p0.x(); // current radius
   const float v0 = p0.y(); // current radius velocity
-  const float dfdr = 2.f/(r0*r0*r0); // hint!
-  float f0 = -1.0f / (r0*r0); // force
+  const float dfdr = 2.f / (r0 * r0 * r0); // hint!
+  float f0 = -1.0f / (r0 * r0); // force
   Eigen::Matrix2f A;
   Eigen::Vector2f b;
   // modify the following two lines to implement implicit time integration
-  A << 1.f, 0.f, 0.f, 1.f;
-  b << r0, v0;
-  return A.inverse()*b;
+
+  // 隐式欧拉积分方程:
+  // r1 = r0 + dt * v1
+  // v1 = v0 + dt * ( f0 + dfdr * (r1 - r0) )
+  //
+  // 整理后得到矩阵形式:
+  // [ 1      -dt         ] [ r1 ]   = [ r0 ]
+  // [ -dt*dfdr   1        ] [ v1 ]     [ v0 + dt*(f0 - dfdr*r0) ]
+
+  A << 1.f,      -dt,
+       -dt * dfdr, 1.f;
+  b << r0,
+       v0 + dt * (f0 - dfdr * r0);
+  return A.inverse() * b;
 }
 
 /**
