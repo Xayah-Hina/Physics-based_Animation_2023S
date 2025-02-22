@@ -101,15 +101,6 @@ const SIM_DopDescription* GAS_Task02::getDopDescription()
     ACTIVATE_GAS_GEOMETRY
     ACTIVATE_GAS_GEOMETRY_BOX
     ACTIVATE_GAS_GEOMETRY_CIRCLE
-    static std::array<PRM_Name, 3> IntegratorType = {
-        PRM_Name("0", "Explicit"),
-        PRM_Name("1", "Implicit"),
-        PRM_Name(nullptr),
-    };
-    static PRM_Name IntegratorTypeName("IntegratorType", "Integrator Type");
-    static PRM_Default IntegratorTypeNameDefault(0);
-    static PRM_ChoiceList CLIntegratorType(PRM_CHOICELIST_SINGLE, IntegratorType.data());
-    PRMs.emplace_back(PRM_ORD, 1, &IntegratorTypeName, &IntegratorTypeNameDefault, &CLIntegratorType);
     PRMs.emplace_back();
 
     static SIM_DopDescription DESC(GEN_NODE,
