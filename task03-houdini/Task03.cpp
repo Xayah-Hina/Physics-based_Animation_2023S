@@ -195,6 +195,13 @@ void set_force_accelerated(
                     // far field approximation
                     // write a few lines of code here to compute the force from far grid.
                     // use the center for the gravity of the grid : `acc.grid2cg[jy * num_div + jx]`
+                    unsigned int grid_index = jy * num_div + jx;
+                    unsigned int np = acc.grid2idx[grid_index + 1] - acc.grid2idx[grid_index];
+                    if (np > 0)
+                    {
+                        // Compute the force from the grid cell's center of gravity, scaled by np.
+                        particles[ip].force += np * gravitational_force(acc.grid2cg[grid_index] - particles[ip].pos);
+                    }
                 }
             }
         }
@@ -211,6 +218,15 @@ const SIM_DopDescription* GAS_Task03::getDopDescription()
     static std::vector<PRM_Template> PRMs;
     PRMs.clear();
     ACTIVATE_GAS_GEOMETRY
+    static std::array<PRM_Name, 3> SolverType = {
+        PRM_Name("0", "Brute-force"),
+        PRM_Name("1", "Accelerated"),
+        PRM_Name(nullptr),
+    };
+    static PRM_Name SolverTypeName("SolverType", "Solver Type");
+    static PRM_Default SolverTypeNameDefault(0, "Brute-force");
+    static PRM_ChoiceList CLSolverType(PRM_CHOICELIST_SINGLE, SolverType.data());
+    PRMs.emplace_back(PRM_ORD, 1, &SolverTypeName, &SolverTypeNameDefault, &CLSolverType);
     PRMs.emplace_back();
 
     static SIM_DopDescription DESC(GEN_NODE,
@@ -274,8 +290,18 @@ bool GAS_Task03::solveGasSubclass(SIM_Engine& engine, SIM_Object* obj, SIM_Time 
     }
 
     // switch brute-force/accelerated computation here by uncomment/comment below
-    set_force_bruteforce(particles);
-    // set_force_accelerated(particles, acceleration, box_size, num_div);
+    Acceleration acceleration(particles.size(), num_div);
+    switch (getSolverType())
+    {
+    case 0:
+        set_force_bruteforce(particles);
+        break;
+    case 1:
+        set_force_accelerated(particles, acceleration, box_size, num_div);
+        break;
+    default:
+        throw std::runtime_error("Invalid solver type");
+    }
 
     for (auto& p : particles)
     {
