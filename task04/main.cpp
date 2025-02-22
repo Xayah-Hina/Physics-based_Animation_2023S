@@ -117,15 +117,57 @@ void nearest_kdtree(
   // Cull the tree branch whose nodes will not be the minimum distance points.
   // Use the "signed_distance_aabb" function above.
 
-  const Eigen::Vector2f pos = nodes[idx_node].pos;
-  if ((pos - pos_in).norm() < (pos_near - pos_in).norm()) { pos_near = pos; } // update the nearest position
+  // const Eigen::Vector2f pos = nodes[idx_node].pos;
+  // if ((pos - pos_in).norm() < (pos_near - pos_in).norm()) { pos_near = pos; } // update the nearest position
+  //
+  // if (i_depth % 2 == 0) { // division in x direction
+  //   nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_left, x_min, pos.x(), y_min, y_max, i_depth + 1);
+  //   nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_right, pos.x(), x_max, y_min, y_max, i_depth + 1);
+  // } else { // division in y-direction
+  //   nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_left, x_min, x_max, y_min, pos.y(), i_depth + 1);
+  //   nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_right, x_min, x_max, pos.y(), y_max, i_depth + 1);
+  // }
 
-  if (i_depth % 2 == 0) { // division in x direction
-    nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_left, x_min, pos.x(), y_min, y_max, i_depth + 1);
-    nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_right, pos.x(), x_max, y_min, y_max, i_depth + 1);
-  } else { // division in y-direction
-    nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_left, x_min, x_max, y_min, pos.y(), i_depth + 1);
-    nearest_kdtree(pos_near, pos_in, nodes, nodes[idx_node].idx_node_right, x_min, x_max, pos.y(), y_max, i_depth + 1);
+
+  // 计算当前已知最近距离
+  float currentBest = (pos_near - pos_in).norm();
+  // 计算查询点 pos_in 到当前 AABB 的最小可能距离
+  float bound = signed_distance_aabb(pos_in, x_min, x_max, y_min, y_max);
+  // 如果 pos_in 位于区域内部，bound 可能为负，此时使用 0 作为下界
+  if (std::max(bound, 0.f) > currentBest) {
+    return; // 当前区域内的点到 pos_in 的距离下界已经大于当前最近距离，剪枝
+  }
+
+  // 检查当前节点，更新最近点
+  const Eigen::Vector2f pos = nodes[idx_node].pos;
+  float d = (pos - pos_in).norm();
+  if (d < currentBest) {
+    pos_near = pos;
+    currentBest = d;
+  }
+
+  // 根据当前深度判断分割轴，并确定左右子树的区域范围
+  if (i_depth % 2 == 0) { // x 方向分割
+    unsigned int left = nodes[idx_node].idx_node_left;
+    unsigned int right = nodes[idx_node].idx_node_right;
+    // 根据 pos_in.x() 与当前节点 x 值比较，决定先访问哪侧子树
+    if (pos_in.x() < pos.x()) {
+      nearest_kdtree(pos_near, pos_in, nodes, left, x_min, pos.x(), y_min, y_max, i_depth + 1);
+      nearest_kdtree(pos_near, pos_in, nodes, right, pos.x(), x_max, y_min, y_max, i_depth + 1);
+    } else {
+      nearest_kdtree(pos_near, pos_in, nodes, right, pos.x(), x_max, y_min, y_max, i_depth + 1);
+      nearest_kdtree(pos_near, pos_in, nodes, left, x_min, pos.x(), y_min, y_max, i_depth + 1);
+    }
+  } else { // y 方向分割
+    unsigned int left = nodes[idx_node].idx_node_left;
+    unsigned int right = nodes[idx_node].idx_node_right;
+    if (pos_in.y() < pos.y()) {
+      nearest_kdtree(pos_near, pos_in, nodes, left, x_min, x_max, y_min, pos.y(), i_depth + 1);
+      nearest_kdtree(pos_near, pos_in, nodes, right, x_min, x_max, pos.y(), y_max, i_depth + 1);
+    } else {
+      nearest_kdtree(pos_near, pos_in, nodes, right, x_min, x_max, pos.y(), y_max, i_depth + 1);
+      nearest_kdtree(pos_near, pos_in, nodes, left, x_min, x_max, y_min, pos.y(), i_depth + 1);
+    }
   }
 }
 
