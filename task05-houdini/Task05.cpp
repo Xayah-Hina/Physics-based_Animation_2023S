@@ -8,33 +8,42 @@
 #include <PRM/PRM_Template.h>
 #include <PRM/PRM_Default.h>
 #include <PRM/PRM_Name.h>
+
+#include <GU/GU_PrimPoly.h>
 #include <Eigen/Dense>
 
 auto vertex_to_elem(
-    const Eigen::MatrixXi &elem2vtx,
-    size_t num_vtx) {
+    const Eigen::MatrixXi& elem2vtx,
+    size_t num_vtx)
+{
     std::vector<unsigned int> vtx2idx, idx2elem;
     vtx2idx.assign(num_vtx + 1, 0);
-    for (int i_elem = 0; i_elem < elem2vtx.rows(); i_elem++) {
-        for (int i_node = 0; i_node < elem2vtx.cols(); i_node++) {
+    for (int i_elem = 0; i_elem < elem2vtx.rows(); i_elem++)
+    {
+        for (int i_node = 0; i_node < elem2vtx.cols(); i_node++)
+        {
             const int i_vtx = elem2vtx(i_elem, i_node);
             vtx2idx[i_vtx + 1] += 1;
         }
     }
-    for (unsigned int i_vtx = 0; i_vtx < num_vtx; ++i_vtx) {
+    for (unsigned int i_vtx = 0; i_vtx < num_vtx; ++i_vtx)
+    {
         vtx2idx[i_vtx + 1] += vtx2idx[i_vtx];
     }
     unsigned int num_idx = vtx2idx[num_vtx];
     idx2elem.resize(num_idx);
-    for (int i_elem = 0; i_elem < elem2vtx.rows(); i_elem++) {
-        for (int i_node = 0; i_node < elem2vtx.cols(); i_node++) {
+    for (int i_elem = 0; i_elem < elem2vtx.rows(); i_elem++)
+    {
+        for (int i_node = 0; i_node < elem2vtx.cols(); i_node++)
+        {
             const int i_vtx = elem2vtx(i_elem, i_node);
             const unsigned int ind1 = vtx2idx[i_vtx];
             idx2elem[ind1] = i_elem;
             vtx2idx[i_vtx] += 1;
         }
     }
-    for (int ivtx = static_cast<int>(num_vtx); ivtx >= 1; --ivtx) {
+    for (int ivtx = static_cast<int>(num_vtx); ivtx >= 1; --ivtx)
+    {
         vtx2idx[ivtx] = vtx2idx[ivtx - 1];
     }
     vtx2idx[0] = 0;
@@ -195,7 +204,9 @@ float gradient_descent_energy_minimization(
 
 
 #define ACTIVATE_GAS_GEOMETRY static PRM_Name GeometryName(GAS_NAME_GEOMETRY, SIM_GEOMETRY_DATANAME); static PRM_Default GeometryNameDefault(0, SIM_GEOMETRY_DATANAME); PRMs.emplace_back(PRM_STRING, 1, &GeometryName, &GeometryNameDefault);
+#define ACTIVATE_GAS_GEOMETRY_MESH static PRM_Name GeometryMeshName("geo2", "GeometryMesh"); static PRM_Default GeometryMeshNameDefault(0, "GeometryMesh"); PRMs.emplace_back(PRM_STRING, 1, &GeometryMeshName, &GeometryMeshNameDefault);
 #define POINT_ATTRIBUTE_V3(NAME) GA_RWAttributeRef NAME##_attr = gdp.findGlobalAttribute(#NAME); if (!NAME##_attr.isValid()) NAME##_attr = gdp.addFloatTuple(GA_ATTRIB_POINT, #NAME, 3, GA_Defaults(0)); GA_RWHandleV3 NAME##_handle(NAME##_attr);
+#define POINT_ATTRIBUTE_I(NAME) GA_RWAttributeRef NAME##_attr = gdp.findGlobalAttribute(#NAME); if (!NAME##_attr.isValid()) NAME##_attr = gdp.addIntTuple(GA_ATTRIB_POINT, #NAME, 1, GA_Defaults(0)); GA_RWHandleI NAME##_handle(NAME##_attr);
 #define GLOBAL_ATTRIBUTE_F(NAME) GA_RWAttributeRef NAME##_attr = gdp.findGlobalAttribute(#NAME); if (!NAME##_attr.isValid()) NAME##_attr = gdp.addFloatTuple(GA_ATTRIB_DETAIL, #NAME, 1, GA_Defaults(0)); GA_RWHandleF NAME##_handle(NAME##_attr);
 
 const SIM_DopDescription* GAS_Task05::getDopDescription()
@@ -203,6 +214,7 @@ const SIM_DopDescription* GAS_Task05::getDopDescription()
     static std::vector<PRM_Template> PRMs;
     PRMs.clear();
     ACTIVATE_GAS_GEOMETRY
+    ACTIVATE_GAS_GEOMETRY_MESH
     PRMs.emplace_back();
 
     static SIM_DopDescription DESC(GEN_NODE,
@@ -221,24 +233,131 @@ bool GAS_Task05::solveGasSubclass(SIM_Engine& engine, SIM_Object* obj, SIM_Time 
     SIM_GeometryCopy* G = getGeometryCopy(obj, GAS_NAME_GEOMETRY);
     SIM_GeometryAutoWriteLock lock(G);
     GU_Detail& gdp = lock.getGdp();
+    POINT_ATTRIBUTE_V3(vtx2xyz_ini);
+    POINT_ATTRIBUTE_I(vtx2isfree);
 
-    constexpr float learning_rate = 6.5e-3f;
+    SIM_GeometryCopy* Mesh = getGeometryCopy(obj, "geo2");
+    SIM_GeometryAutoWriteLock lock_mesh(Mesh);
+    GU_Detail& gdp_mesh = lock_mesh.getGdp();
+
+    constexpr float learning_rate = 6.5e-4f;
+    Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> vtx2xyz;
+    Eigen::Matrix<float, Eigen::Dynamic, 3, Eigen::RowMajor> vtx2xyz_ini;
+    Eigen::Matrix<int, Eigen::Dynamic, 2, Eigen::RowMajor> line2vtx;
+    Eigen::MatrixX3f vtx2isfree;
     if (engine.getSimulationFrame(time) == 1)
     {
         constexpr int num_theta = 64;
-        const auto [tri2vtx, vtx2xyz_ini] = generate_mesh_annulus3(0.3, 0.8, 32, num_theta);
-        const auto line2vtx = lines_of_mesh(tri2vtx, static_cast<int>(vtx2xyz_ini.rows()));
-        auto vtx2xyz = vtx2xyz_ini;
+        const auto [tri2vtx_ret, vtx2xyz_ini_ret] = generate_mesh_annulus3(0.3, 0.8, 32, num_theta);
+        const auto line2vtx_ret = lines_of_mesh(tri2vtx_ret, static_cast<int>(vtx2xyz_ini_ret.rows()));
+        vtx2xyz_ini = vtx2xyz_ini_ret;
+        vtx2xyz = vtx2xyz_ini;
+        line2vtx = line2vtx_ret;
 
         // whether the DoFs of vertices are fixed or not. Fixed: 0, Free:1
-        Eigen::MatrixX3f vtx2isfree = Eigen::MatrixX3f::Ones(vtx2xyz.rows(), 3);
+        vtx2isfree = Eigen::MatrixX3f::Ones(vtx2xyz.rows(), 3);
         for (int i = 0; i < num_theta; ++i)
         {
             vtx2isfree.row(i) = Eigen::Vector3f(0., 0., 0);
         }
+
+        for (int i = 0; i < vtx2xyz.rows(); i++)
+        {
+            UT_Vector3 pos(vtx2xyz(i, 0), vtx2xyz(i, 1), vtx2xyz(i, 2));
+            GA_Offset off = gdp.appendPoint();
+            gdp.setPos3(off, pos);
+            vtx2xyz_ini_handle.set(off, pos);
+
+            off = gdp_mesh.appendPoint();
+            gdp.setPos3(off, pos);
+        }
+
+        for (int i = 0; i < line2vtx.rows(); i++)
+        {
+            GA_Offset off0 = gdp.pointOffset(line2vtx(i, 0));
+            GA_Offset off1 = gdp.pointOffset(line2vtx(i, 1));
+            GEO_PrimPoly* poly = GU_PrimPoly::build(&gdp, 2, true, false);
+            poly->setPointOffset(0, off0);
+            poly->setPointOffset(1, off1);
+        }
+
+        for (int i = 0; i < num_theta; ++i)
+        {
+            GA_Offset off = gdp.pointOffset(i);
+            vtx2isfree_handle.set(off, 1);
+        }
+
+        for (int i = 0; i < tri2vtx_ret.rows(); i++)
+        {
+            GA_Offset off0 = gdp_mesh.pointOffset(tri2vtx_ret(i, 0));
+            GA_Offset off1 = gdp_mesh.pointOffset(tri2vtx_ret(i, 1));
+            GA_Offset off2 = gdp_mesh.pointOffset(tri2vtx_ret(i, 2));
+            GEO_PrimPoly* poly = GU_PrimPoly::build(&gdp_mesh, 3, false, false);
+            poly->setPointOffset(0, off0);
+            poly->setPointOffset(1, off2);
+            poly->setPointOffset(2, off1);
+        }
     }
     else
     {
+        GA_Offset off;
+        {
+            vtx2xyz.resize(gdp.getNumPoints(), 3);
+            vtx2xyz_ini.resize(gdp.getNumPoints(), 3);
+            vtx2isfree = Eigen::MatrixX3f::Ones(gdp.getNumPoints(), 3);
+            GA_FOR_ALL_PTOFF(&gdp, off)
+            {
+                UT_Vector3 pos = gdp.getPos3(off);
+                GA_Index idx = gdp.pointIndex(off);
+                vtx2xyz.row(idx) = Eigen::Vector3f(pos.x(), pos.y(), pos.z());
+                UT_Vector3 vtx2xyz_ini_off = vtx2xyz_ini_handle.get(off);
+                vtx2xyz_ini.row(idx) = Eigen::Vector3f(vtx2xyz_ini_off.x(), vtx2xyz_ini_off.y(), vtx2xyz_ini_off.z());
+                int vtx2isfree_off = vtx2isfree_handle.get(off);
+                if (vtx2isfree_off == 1)
+                    vtx2isfree.row(idx) = Eigen::Vector3f(0., 0., 0);
+            }
+        }
+
+        {
+            const GEO_Primitive* prim;
+            line2vtx.resize(gdp.getNumPrimitives(), 2);
+            int iter = 0;
+            GA_FOR_ALL_PRIMITIVES(&gdp, prim)
+            {
+                GA_Offset off0 = prim->getPointOffset(0);
+                GA_Offset off1 = prim->getPointOffset((1));
+                GA_Index idx0 = gdp.pointIndex(off0);
+                GA_Index idx1 = gdp.pointIndex(off1);
+                line2vtx.row(iter++) = Eigen::Vector2i(idx0, idx1);
+            }
+        }
     }
+
+    for (int itr = 0; itr < 400; ++itr)
+    {
+        float W = gradient_descent_energy_minimization(
+            vtx2xyz, vtx2xyz_ini, line2vtx, 60.f, 1.f, {0., -0.1, 0}, vtx2isfree, learning_rate);
+    }
+
+    {
+        GA_Offset off;
+        GA_FOR_ALL_PTOFF(&gdp, off)
+        {
+            GA_Index idx = gdp.pointIndex(off);
+            UT_Vector3 pos(vtx2xyz(idx, 0), vtx2xyz(idx, 1), vtx2xyz(idx, 2));
+            gdp.setPos3(off, pos);
+        }
+    }
+
+    {
+        GA_Offset off;
+        GA_FOR_ALL_PTOFF(&gdp_mesh, off)
+        {
+            GA_Index idx = gdp_mesh.pointIndex(off);
+            UT_Vector3 pos(vtx2xyz(idx, 0), vtx2xyz(idx, 1), vtx2xyz(idx, 2));
+            gdp_mesh.setPos3(off, pos);
+        }
+    }
+
     return true;
 }
