@@ -84,6 +84,15 @@ auto load_3d_model() {
   return std::make_pair(tri2vtx, vtx2xyz);
 }
 
+inline Eigen::Matrix3f skew(const Eigen::Vector3f &v)
+{
+  Eigen::Matrix3f S;
+  S << 0.0f,    -v.z(),   v.y(),
+       v.z(),    0.0f,   -v.x(),
+      -v.y(),    v.x(),   0.0f;
+  return S;
+}
+
 int main() {
   const auto[tri2vtx, vtx2xyz_ini] = load_3d_model();
   const Eigen::Matrix3f inertia = inertia_tensor_solid_3d_triangle_mesh(tri2vtx, vtx2xyz_ini);
@@ -108,8 +117,8 @@ int main() {
         // Write some code below to simulate rotation of the rigid body
         // Use the **forward Euler method** to update the rotation matrix and the angular velocity
         // Note that `rotation` should stay a rotational matrix after the update
-        // rotation =
-        // Omega =
+        rotation = rotation * (Eigen::Matrix3f::Identity() + dt * skew(Omega));
+        Omega = Omega + dt * inertia.inverse() * ((inertia * Omega).cross(Omega));
         // Do not change anything else except for the two lines above.
       }
       std::cout << "time: " << time << std::endl;
