@@ -85,9 +85,9 @@ void wdw_volume_tri_origin(
   w = 1./6.*node2xyz[0].dot(node2xyz[1].cross(node2xyz[2]));
   // ------------------------------
   // Write some code below to compute differentiation. Keep it simple and understandable
-  // dw[0] =
-  // dw[1] =
-  // dw[2] =
+  dw[0] = (1.0 / 6.0) * ( node2xyz[1].cross( node2xyz[2] ) );
+  dw[1] = (1.0 / 6.0) * ( node2xyz[2].cross( node2xyz[0] ) );
+  dw[2] = (1.0 / 6.0) * ( node2xyz[0].cross( node2xyz[1] ) );
 }
 
 void inflate(
@@ -152,12 +152,18 @@ void inflate(
     // write some code including 'w'
     for (unsigned int inode = 0; inode < 3; ++inode) {
       for (unsigned int idim = 0; idim < 3; ++idim) {
-        // write some code including `dw` and `lambda`
+        // Add derivative of the constraint to dW
+        dW(node2vtx[inode]*3 + idim) += lambda * dw[inode](idim);
+
+        // Coupling in the Hessian for x–λ and λ–x
+        ddW(node2vtx[inode]*3 + idim, num_vtx*3) += dw[inode](idim);
+        ddW(num_vtx*3, node2vtx[inode]*3 + idim) += dw[inode](idim);
       }
     }
   }
   // Do not forget to write one line of code here
   // -------------------------------------------------
+  dW(num_vtx*3) += (volume - volume_trg);
   // Do not change below
   // damping for stable convergence
   for (unsigned int i = 0; i < ddW.rows(); ++i) {
