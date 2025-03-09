@@ -13,8 +13,6 @@ public:
     inline static auto DATANAME = "Task07";
     static constexpr bool UNIQUE_DATANAME = false;
 
-    GETSET_DATA_FUNCS_I("SolverType", SolverType)
-
 protected:
     explicit GAS_Task07(const SIM_DataFactory* factory): BaseClass(factory) {}
     bool solveGasSubclass(SIM_Engine& engine, SIM_Object* obj, SIM_Time time, SIM_Time timestep) override;
