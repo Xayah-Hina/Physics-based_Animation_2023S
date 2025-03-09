@@ -63,5 +63,6 @@ external/glfwlib
 *.recipe
 
 !task08/bunny_1k.obj
+!task08-houdini/bunny_1k.obj
 !task09/bunny_1k.obj
 !task10/t-rex.obj
